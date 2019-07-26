@@ -36,6 +36,12 @@ import numpy as np
 import tensorflow as tf
 
 import cv2
+import os,sys,inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0,parentdir)
+import VGDLEnvAndres
+
 
 
 NATURE_DQN_OBSERVATION_SHAPE = (84, 84)  # Size of downscaled Atari 2600 frame.
@@ -70,17 +76,20 @@ def create_atari_environment(game_name=None, sticky_actions=True):
     An Atari 2600 environment with some standard preprocessing.
   """
   assert game_name is not None
+  #ANDRES
   pdb.set_trace()
-  game_version = 'v0' if sticky_actions else 'v4'
-  full_game_name = '{}NoFrameskip-{}'.format(game_name, game_version)
-  env = gym.make(full_game_name)
-  # Strip out the TimeLimit wrapper from Gym, which caps us at 100k frames. We
-  # handle this time limit internally instead, which lets us cap at 108k frames
-  # (30 minutes). The TimeLimit wrapper also plays poorly with saving and
-  # restoring states.
-  env = env.env
-  env = AtariPreprocessing(env)
-  pdb.set_trace()
+  if game_name[0:4] == 'VGDL':
+    env = VGDLEnvAndres(game_name[5:])
+  else:
+    game_version = 'v0' if sticky_actions else 'v4'
+    full_game_name = '{}NoFrameskip-{}'.format(game_name, game_version)
+    env = gym.make(full_game_name)
+    # Strip out the TimeLimit wrapper from Gym, which caps us at 100k frames. We
+    # handle this time limit internally instead, which lets us cap at 108k frames
+    # (30 minutes). The TimeLimit wrapper also plays poorly with saving and
+    # restoring states.
+    env = env.env
+    env = AtariPreprocessing(env)
   return env
 
 

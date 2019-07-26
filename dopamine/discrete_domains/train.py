@@ -55,7 +55,7 @@ def main(unused_argv):
   """
   tf.logging.set_verbosity(tf.logging.INFO)
   run_experiment.load_gin_configs(FLAGS.gin_files, FLAGS.gin_bindings)
-  runner = run_experiment.create_runner(FLAGS.base_dir, FLAGS.game_name)
+  runner = run_experiment.create_runner(FLAGS.base_dir)
   runner.run_experiment()
 
 

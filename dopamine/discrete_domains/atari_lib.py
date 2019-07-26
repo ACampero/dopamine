@@ -70,6 +70,7 @@ def create_atari_environment(game_name=None, sticky_actions=True):
     An Atari 2600 environment with some standard preprocessing.
   """
   assert game_name is not None
+  pdb.set_trace()
   game_version = 'v0' if sticky_actions else 'v4'
   full_game_name = '{}NoFrameskip-{}'.format(game_name, game_version)
   env = gym.make(full_game_name)

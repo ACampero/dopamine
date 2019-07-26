@@ -40,6 +40,9 @@ flags.DEFINE_multi_string(
     'Gin bindings to override the values set in the config files '
     '(e.g. "DQNAgent.epsilon_train=0.1",'
     '      "create_environment.game_name="Pong"").')
+#flags.DEFINE_string(
+#    'VGDL_name', None, 'VGDL_name')
+
 
 FLAGS = flags.FLAGS
 
@@ -51,8 +54,8 @@ def main(unused_argv):
     unused_argv: Arguments (unused).
   """
   tf.logging.set_verbosity(tf.logging.INFO)
-  run_experiment.load_gin_configs(FLAGS.gin_files, FLAGS.gin_bindings)
-  runner = run_experiment.create_runner(FLAGS.base_dir)
+  run_experiment.load_gin_configs(FLAGS.gin_files, FLAGS.gin_bindings, FLAGS.VGDL_name)
+  runner = run_experiment.create_runner(FLAGS.base_dir, FLAGS.game_name)
   runner.run_experiment()
 
 

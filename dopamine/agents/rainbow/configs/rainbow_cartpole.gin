@@ -30,6 +30,7 @@ create_gym_environment.environment_name = 'CartPole'
 create_gym_environment.version = 'v0'
 create_agent.agent_name = 'rainbow'
 Runner.create_environment_fn = @gym_lib.create_gym_environment
+
 Runner.num_iterations = 500
 Runner.training_steps = 1000
 Runner.evaluation_steps = 1000

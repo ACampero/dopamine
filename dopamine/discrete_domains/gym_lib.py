@@ -36,7 +36,7 @@ import tensorflow as tf
 
 import gin.tf
 
-
+#prueba
 CARTPOLE_MIN_VALS = np.array([-2.4, -5., -math.pi/12., -math.pi*2.])
 CARTPOLE_MAX_VALS = np.array([2.4, 5., math.pi/12., math.pi*2.])
 ACROBOT_MIN_VALS = np.array([-1., -1., -1., -1., -5., -5.])

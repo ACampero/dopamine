@@ -26,7 +26,7 @@ from __future__ import division
 from __future__ import print_function
 
 import math
-
+import pdb
 
 import atari_py
 import gin
@@ -79,6 +79,7 @@ def create_atari_environment(game_name=None, sticky_actions=True):
   # restoring states.
   env = env.env
   env = AtariPreprocessing(env)
+  pdb.set_trace()
   return env
 
 

@@ -21,6 +21,7 @@ from __future__ import print_function
 import os
 import sys
 import time
+import pdb
 
 from dopamine.agents.dqn import dqn_agent
 from dopamine.agents.implicit_quantile import implicit_quantile_agent
@@ -249,6 +250,7 @@ class Runner(object):
       action: int, the initial action chosen by the agent.
     """
     initial_observation = self._environment.reset()
+    #pdb.set_trace()
     return self._agent.begin_episode(initial_observation)
 
   def _run_one_step(self, action):

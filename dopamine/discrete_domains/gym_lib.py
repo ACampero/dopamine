@@ -27,7 +27,7 @@ from __future__ import print_function
 
 import itertools
 import math
-
+import pdb
 
 
 import gym
@@ -68,6 +68,7 @@ def create_gym_environment(environment_name=None, version='v0'):
   # Wrap the returned environment in a class which conforms to the API expected
   # by Dopamine.
   env = GymPreprocessing(env)
+  #pdb.set_trace()
   return env
 
 

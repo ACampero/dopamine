@@ -22,7 +22,7 @@ import collections
 import math
 import os
 import random
-
+import pdb
 
 
 from dopamine.discrete_domains import atari_lib
@@ -445,6 +445,7 @@ class DQNAgent(object):
     """
     # Set current observation. We do the reshaping to handle environments
     # without frame stacking.
+    #pdb.set_trace()
     self._observation = np.reshape(observation, self.observation_shape)
     # Swap out the oldest frame with the current frame.
     self.state = np.roll(self.state, -1, axis=-1)

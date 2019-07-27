@@ -347,6 +347,7 @@ class Runner(object):
                        'Episode length: {} '.format(episode_length) +
                        'Return: {}\r'.format(episode_return))
       sys.stdout.flush()
+      #pdb.set_trace()
     return step_count, sum_returns, num_episodes
 
   def _run_train_phase(self, statistics):

@@ -39,8 +39,10 @@ import cv2
 import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
+parentdir = os.path.dirname(parentdir)
+parentdir = os.path.dirname(parentdir)
 sys.path.insert(0,parentdir)
-import VGDLEnvAndres
+from VGDLEnvAndres import VGDLEnvAndres
 
 
 
@@ -77,7 +79,7 @@ def create_atari_environment(game_name=None, sticky_actions=True):
   """
   assert game_name is not None
   #ANDRES
-  pdb.set_trace()
+  #pdb.set_trace()
   if game_name[0:4] == 'VGDL':
     env = VGDLEnvAndres(game_name[5:])
   else:

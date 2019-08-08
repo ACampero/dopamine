@@ -240,6 +240,8 @@ class Runner(object):
           assert 'current_iteration' in experiment_data
           self._logger.data = experiment_data['logs']
           self._start_iteration = experiment_data['current_iteration'] + 1
+          if self._environment.game_name[0:4] == 'VGDL':
+            self._environment.set_level(experiment_data['vgdl_level'])
         tf.logging.info('Reloaded checkpoint and will start from iteration %d',
                         self._start_iteration)
 
@@ -331,8 +333,14 @@ class Runner(object):
     step_count = 0
     num_episodes = 0
     sum_returns = 0.
+    #vgdl_save_flag = 0
+    #vgdl_store_every = 100000
 
     while step_count < min_steps:
+      ##ANDRES added flag
+      #if self._agent.training_steps - vgdl_save_flag >= vgdl_store_every:
+      #  vgdl_save_flag += vgdl_store_every
+
       episode_length, episode_return = self._run_one_episode()
       statistics.append({
           '{}_episode_lengths'.format(run_mode_str): episode_length,
@@ -465,11 +473,16 @@ class Runner(object):
     Args:
       iteration: int, iteration number for checkpointing.
     """
+    if self._environment.game_name[0:4] == 'VGDL':
+      vgdl_level = self._environment.get_level()
+    else:
+      vgdl_level = 0
     experiment_data = self._agent.bundle_and_checkpoint(self._checkpoint_dir,
-                                                        iteration)
+                                                        iteration, vgdl_level)
     if experiment_data:
       experiment_data['current_iteration'] = iteration
       experiment_data['logs'] = self._logger.data
+      experiment_data['vgdl_level'] = vgdl_level
       self._checkpointer.save_checkpoint(iteration, experiment_data)
 
   def run_experiment(self):

@@ -473,7 +473,7 @@ class DQNAgent(object):
     """Resets the agent state by filling it with zeros."""
     self.state.fill(0)
 
-  def bundle_and_checkpoint(self, checkpoint_dir, iteration_number):
+  def bundle_and_checkpoint(self, checkpoint_dir, iteration_number, vgdl_level=0):
     """Returns a self-contained bundle of the agent's state.
 
     This is used for checkpointing. It will return a dictionary containing all
@@ -501,6 +501,7 @@ class DQNAgent(object):
     bundle_dictionary = {}
     bundle_dictionary['state'] = self.state
     bundle_dictionary['training_steps'] = self.training_steps
+    bundle_dictionary['vgdl_level'] = vgdl_level
     return bundle_dictionary
 
   def unbundle(self, checkpoint_dir, iteration_number, bundle_dictionary):

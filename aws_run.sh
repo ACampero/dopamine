@@ -1,5 +1,5 @@
 
-
+git pull
 cd dopamine
 
 array=( aliens zelda butteflies plaqueattack expt_antagonist expt_ee

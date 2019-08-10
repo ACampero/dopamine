@@ -80,7 +80,7 @@ def create_atari_environment(game_name=None, sticky_actions=True):
   #ANDRES
   #pdb.set_trace()
   if game_name[0:4] == 'VGDL':
-    env = VGDLEnvAndres(game_name[5:])
+    env = VGDLEnvAndres(game_name)
   else:
     game_version = 'v0' if sticky_actions else 'v4'
     full_game_name = '{}NoFrameskip-{}'.format(game_name, game_version)

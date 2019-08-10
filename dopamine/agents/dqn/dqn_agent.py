@@ -502,6 +502,7 @@ class DQNAgent(object):
     bundle_dictionary['state'] = self.state
     bundle_dictionary['training_steps'] = self.training_steps
     bundle_dictionary['vgdl_level'] = vgdl_level
+    #pdb.set_trace()
     return bundle_dictionary
 
   def unbundle(self, checkpoint_dir, iteration_number, bundle_dictionary):

@@ -241,7 +241,7 @@ class Runner(object):
           self._logger.data = experiment_data['logs']
           self._start_iteration = experiment_data['current_iteration'] + 1
           if self._environment.game_name[0:4] == 'VGDL':
-            self._environment.set_level(experiment_data['vgdl_level'])
+            self._environment.set_level(experiment_data['vgdl_level'], experiment_data['training_steps'])
         tf.logging.info('Reloaded checkpoint and will start from iteration %d',
                         self._start_iteration)
 
@@ -468,8 +468,9 @@ class Runner(object):
       self._logger.log_to_file(self._logging_file_prefix, iteration)
 
   def _checkpoint_experiment(self, iteration):
+    #print('hola')
+    #pdb.set_trace()
     """Checkpoint experiment data.
-
     Args:
       iteration: int, iteration number for checkpointing.
     """
@@ -477,6 +478,7 @@ class Runner(object):
       vgdl_level = self._environment.get_level()
     else:
       vgdl_level = 0
+    #pdb.set_trace()
     experiment_data = self._agent.bundle_and_checkpoint(self._checkpoint_dir,
                                                         iteration, vgdl_level)
     if experiment_data:
@@ -538,10 +540,10 @@ class TrainRunner(Runner):
     Returns:
       A dict containing summary statistics for this iteration.
     """
+    
     statistics = iteration_statistics.IterationStatistics()
     num_episodes_train, average_reward_train = self._run_train_phase(
         statistics)
-
     self._save_tensorboard_summaries(iteration, num_episodes_train,
                                      average_reward_train)
     return statistics.data_lists

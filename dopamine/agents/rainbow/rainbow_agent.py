@@ -37,9 +37,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import collections
-
-
 
 from dopamine.agents.dqn import dqn_agent
 from dopamine.discrete_domains import atari_lib
@@ -59,8 +56,10 @@ class RainbowAgent(dqn_agent.DQNAgent):
                observation_shape=dqn_agent.NATURE_DQN_OBSERVATION_SHAPE,
                observation_dtype=dqn_agent.NATURE_DQN_DTYPE,
                stack_size=dqn_agent.NATURE_DQN_STACK_SIZE,
-               network=atari_lib.rainbow_network,
+               network=atari_lib.RainbowNetwork,
+               architecture='canonical',
                num_atoms=51,
+               vmin=None,
                vmax=10.,
                gamma=0.99,
                update_horizon=1,
@@ -73,28 +72,30 @@ class RainbowAgent(dqn_agent.DQNAgent):
                epsilon_decay_period=250000,
                replay_scheme='prioritized',
                tf_device='/cpu:*',
-               use_staging=True,
-               optimizer=tf.train.AdamOptimizer(
+               use_staging=False,
+               optimizer=tf.compat.v1.train.AdamOptimizer(
                    learning_rate=0.00025, epsilon=0.0003125),
                summary_writer=None,
                summary_writing_frequency=500):
     """Initializes the agent and constructs the components of its graph.
 
     Args:
-      sess: `tf.Session`, for executing ops.
+      sess: `tf.compat.v1.Session`, for executing ops.
       num_actions: int, number of actions the agent can take at any state.
       observation_shape: tuple of ints or an int. If single int, the observation
         is assumed to be a 2D square.
       observation_dtype: tf.DType, specifies the type of the observations. Note
         that if your inputs are continuous, you should set this to tf.float32.
       stack_size: int, number of frames to use in state stack.
-      network: function expecting three parameters:
-        (num_actions, network_type, state). This function will return the
-        network_type object containing the tensors output by the network.
-        See dopamine.discrete_domains.atari_lib.rainbow_network as
-        an example.
+      network: tf.Keras.Model, expects four parameters:
+        (num_actions, num_atoms, support, network_type).  This class is used to
+        generate network instances that are used by the agent. Each
+        instantiation would have different set of variables. See
+        dopamine.discrete_domains.atari_lib.RainbowNetwork as an example.
       num_atoms: int, the number of buckets of the value function distribution.
-      vmax: float, the value distribution support is [-vmax, vmax].
+      vmin: float, the value distribution support is [vmin, vmax]. If None, we
+        set it to be -vmax.
+      vmax: float, the value distribution support is [vmin, vmax].
       gamma: float, discount factor with the usual RL meaning.
       update_horizon: int, horizon at which updates are performed, the 'n' in
         n-step update.
@@ -114,7 +115,8 @@ class RainbowAgent(dqn_agent.DQNAgent):
       tf_device: str, Tensorflow device on which the agent's graph is executed.
       use_staging: bool, when True use a staging area to prefetch the next
         training batch, speeding training up by about 30%.
-      optimizer: `tf.train.Optimizer`, for training the value function.
+      optimizer: `tf.compat.v1.train.Optimizer`, for training the value
+        function.
       summary_writer: SummaryWriter object for outputting training statistics.
         Summary writing disabled if set to None.
       summary_writing_frequency: int, frequency with which summaries will be
@@ -123,10 +125,16 @@ class RainbowAgent(dqn_agent.DQNAgent):
     # We need this because some tools convert round floats into ints.
     vmax = float(vmax)
     self._num_atoms = num_atoms
-    self._support = tf.linspace(-vmax, vmax, num_atoms)
+    # If vmin is not specified, set it to -vmax similar to C51.
+    vmin = vmin if vmin else -vmax
+    self._support = tf.linspace(vmin, vmax, num_atoms)
     self._replay_scheme = replay_scheme
     # TODO(b/110897128): Make agent optimizer attribute private.
     self.optimizer = optimizer
+    self.architecture = architecture
+
+    if architecture == 'efficient':
+      network = atari_lib.EfficientRainbowNetwork
 
     dqn_agent.DQNAgent.__init__(
         self,
@@ -151,26 +159,18 @@ class RainbowAgent(dqn_agent.DQNAgent):
         summary_writer=summary_writer,
         summary_writing_frequency=summary_writing_frequency)
 
-  def _get_network_type(self):
-    """Returns the type of the outputs of a value distribution network.
-
-    Returns:
-      net_type: _network_type object defining the outputs of the network.
-    """
-    return collections.namedtuple('c51_network',
-                                  ['q_values', 'logits', 'probabilities'])
-
-  def _network_template(self, state):
+  def _create_network(self, name):
     """Builds a convolutional network that outputs Q-value distributions.
 
     Args:
-      state: `tf.Tensor`, contains the agent's current state.
-
+      name: str, this name is passed to the tf.keras.Model and used to create
+        variable scope under the hood by the tf.keras.Model.
     Returns:
-      net: _network_type object containing the tensors output by the network.
+      network: tf.keras.Model, the network instantiated by the Keras model.
     """
-    return self.network(self.num_actions, self._num_atoms, self._support,
-                        self._get_network_type(), state)
+    network = self.network(self.num_actions, self._num_atoms, self._support,
+                           name=name)
+    return network
 
   def _build_replay_buffer(self, use_staging):
     """Creates the replay buffer used by the agent.
@@ -237,7 +237,7 @@ class RainbowAgent(dqn_agent.DQNAgent):
     # size of next_qt_argmax: 1 x batch_size
     next_qt_argmax = tf.argmax(
         self._replay_next_target_net_outputs.q_values, axis=1)[:, None]
-    batch_indices = tf.range(tf.to_int64(batch_size))[:, None]
+    batch_indices = tf.range(tf.cast(batch_size, tf.int64))[:, None]
     # size of next_qt_argmax: batch_size x 2
     batch_indexed_next_qt_argmax = tf.concat(
         [batch_indices, next_qt_argmax], axis=1)
@@ -296,8 +296,8 @@ class RainbowAgent(dqn_agent.DQNAgent):
 
     with tf.control_dependencies([update_priorities_op]):
       if self.summary_writer is not None:
-        with tf.variable_scope('Losses'):
-          tf.summary.scalar('CrossEntropyLoss', tf.reduce_mean(loss))
+        with tf.compat.v1.variable_scope('Losses'):
+          tf.compat.v1.summary.scalar('CrossEntropyLoss', tf.reduce_mean(loss))
       # Schaul et al. reports a slightly different rule, where 1/N is also
       # exponentiated by beta. Not doing so seems more reasonable, and did not
       # impact performance in our experiments.

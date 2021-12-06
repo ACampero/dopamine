@@ -13,22 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Compact implementation of a simplified Rainbow agent.
-
 Specifically, we implement the following components from Rainbow:
-
   * n-step updates;
   * prioritized replay; and
   * distributional RL.
-
 These three components were found to significantly impact the performance of
 the Atari game-playing agent.
-
 Furthermore, our implementation does away with some minor hyperparameter
 choices. Specifically, we
-
   * keep the beta exponent fixed at beta=0.5, rather than increase it linearly;
   * remove the alpha parameter, which was set to alpha=0.5 throughout the paper.
-
 Details in "Rainbow: Combining Improvements in Deep Reinforcement Learning" by
 Hessel et al. (2018).
 """
@@ -36,6 +30,9 @@ Hessel et al. (2018).
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import collections
+
 
 
 from dopamine.agents.dqn import dqn_agent
@@ -56,10 +53,9 @@ class RainbowAgent(dqn_agent.DQNAgent):
                observation_shape=dqn_agent.NATURE_DQN_OBSERVATION_SHAPE,
                observation_dtype=dqn_agent.NATURE_DQN_DTYPE,
                stack_size=dqn_agent.NATURE_DQN_STACK_SIZE,
-               network=atari_lib.RainbowNetwork,
-               architecture='canonical',
+               network=atari_lib.rainbow_network,
+               architecture="canonical",
                num_atoms=51,
-               vmin=None,
                vmax=10.,
                gamma=0.99,
                update_horizon=1,
@@ -72,30 +68,27 @@ class RainbowAgent(dqn_agent.DQNAgent):
                epsilon_decay_period=250000,
                replay_scheme='prioritized',
                tf_device='/cpu:*',
-               use_staging=False,
-               optimizer=tf.compat.v1.train.AdamOptimizer(
+               use_staging=True,
+               optimizer=tf.train.AdamOptimizer(
                    learning_rate=0.00025, epsilon=0.0003125),
                summary_writer=None,
                summary_writing_frequency=500):
     """Initializes the agent and constructs the components of its graph.
-
     Args:
-      sess: `tf.compat.v1.Session`, for executing ops.
+      sess: `tf.Session`, for executing ops.
       num_actions: int, number of actions the agent can take at any state.
       observation_shape: tuple of ints or an int. If single int, the observation
         is assumed to be a 2D square.
       observation_dtype: tf.DType, specifies the type of the observations. Note
         that if your inputs are continuous, you should set this to tf.float32.
       stack_size: int, number of frames to use in state stack.
-      network: tf.Keras.Model, expects four parameters:
-        (num_actions, num_atoms, support, network_type).  This class is used to
-        generate network instances that are used by the agent. Each
-        instantiation would have different set of variables. See
-        dopamine.discrete_domains.atari_lib.RainbowNetwork as an example.
+      network: function expecting three parameters:
+        (num_actions, network_type, state). This function will return the
+        network_type object containing the tensors output by the network.
+        See dopamine.discrete_domains.atari_lib.rainbow_network as
+        an example.
       num_atoms: int, the number of buckets of the value function distribution.
-      vmin: float, the value distribution support is [vmin, vmax]. If None, we
-        set it to be -vmax.
-      vmax: float, the value distribution support is [vmin, vmax].
+      vmax: float, the value distribution support is [-vmax, vmax].
       gamma: float, discount factor with the usual RL meaning.
       update_horizon: int, horizon at which updates are performed, the 'n' in
         n-step update.
@@ -115,8 +108,7 @@ class RainbowAgent(dqn_agent.DQNAgent):
       tf_device: str, Tensorflow device on which the agent's graph is executed.
       use_staging: bool, when True use a staging area to prefetch the next
         training batch, speeding training up by about 30%.
-      optimizer: `tf.compat.v1.train.Optimizer`, for training the value
-        function.
+      optimizer: `tf.train.Optimizer`, for training the value function.
       summary_writer: SummaryWriter object for outputting training statistics.
         Summary writing disabled if set to None.
       summary_writing_frequency: int, frequency with which summaries will be
@@ -125,16 +117,13 @@ class RainbowAgent(dqn_agent.DQNAgent):
     # We need this because some tools convert round floats into ints.
     vmax = float(vmax)
     self._num_atoms = num_atoms
-    # If vmin is not specified, set it to -vmax similar to C51.
-    vmin = vmin if vmin else -vmax
-    self._support = tf.linspace(vmin, vmax, num_atoms)
+    self._support = tf.linspace(-vmax, vmax, num_atoms)
     self._replay_scheme = replay_scheme
     # TODO(b/110897128): Make agent optimizer attribute private.
     self.optimizer = optimizer
-    self.architecture = architecture
 
     if architecture == 'efficient':
-      network = atari_lib.EfficientRainbowNetwork
+        network = atari_lib.efficient_rainbow_network
 
     dqn_agent.DQNAgent.__init__(
         self,
@@ -159,29 +148,31 @@ class RainbowAgent(dqn_agent.DQNAgent):
         summary_writer=summary_writer,
         summary_writing_frequency=summary_writing_frequency)
 
-  def _create_network(self, name):
-    """Builds a convolutional network that outputs Q-value distributions.
-
-    Args:
-      name: str, this name is passed to the tf.keras.Model and used to create
-        variable scope under the hood by the tf.keras.Model.
+  def _get_network_type(self):
+    """Returns the type of the outputs of a value distribution network.
     Returns:
-      network: tf.keras.Model, the network instantiated by the Keras model.
+      net_type: _network_type object defining the outputs of the network.
     """
-    network = self.network(self.num_actions, self._num_atoms, self._support,
-                           name=name)
-    return network
+    return collections.namedtuple('c51_network',
+                                  ['q_values', 'logits', 'probabilities'])
+
+  def _network_template(self, state):
+    """Builds a convolutional network that outputs Q-value distributions.
+    Args:
+      state: `tf.Tensor`, contains the agent's current state.
+    Returns:
+      net: _network_type object containing the tensors output by the network.
+    """
+    return self.network(self.num_actions, self._num_atoms, self._support,
+                        self._get_network_type(), state)
 
   def _build_replay_buffer(self, use_staging):
     """Creates the replay buffer used by the agent.
-
     Args:
       use_staging: bool, if True, uses a staging area to prefetch data for
         faster training.
-
     Returns:
       A `WrappedPrioritizedReplayBuffer` object.
-
     Raises:
       ValueError: if given an invalid replay scheme.
     """
@@ -199,19 +190,14 @@ class RainbowAgent(dqn_agent.DQNAgent):
 
   def _build_target_distribution(self):
     """Builds the C51 target distribution as per Bellemare et al. (2017).
-
     First, we compute the support of the Bellman target, r + gamma Z'. Where Z'
     is the support of the next state distribution:
-
       * Evenly spaced in [-vmax, vmax] if the current state is nonterminal;
       * 0 otherwise (duplicated num_atoms times).
-
     Second, we compute the next-state probabilities, corresponding to the action
     with highest expected value.
-
     Finally we project the Bellman target (support + probabilities) onto the
     original support.
-
     Returns:
       target_distribution: tf.tensor, the target distribution from the replay.
     """
@@ -237,7 +223,7 @@ class RainbowAgent(dqn_agent.DQNAgent):
     # size of next_qt_argmax: 1 x batch_size
     next_qt_argmax = tf.argmax(
         self._replay_next_target_net_outputs.q_values, axis=1)[:, None]
-    batch_indices = tf.range(tf.cast(batch_size, tf.int64))[:, None]
+    batch_indices = tf.range(tf.to_int64(batch_size))[:, None]
     # size of next_qt_argmax: batch_size x 2
     batch_indexed_next_qt_argmax = tf.concat(
         [batch_indices, next_qt_argmax], axis=1)
@@ -252,7 +238,6 @@ class RainbowAgent(dqn_agent.DQNAgent):
 
   def _build_train_op(self):
     """Builds a training op.
-
     Returns:
       train_op: An op performing one step of training from replay data.
     """
@@ -296,8 +281,8 @@ class RainbowAgent(dqn_agent.DQNAgent):
 
     with tf.control_dependencies([update_priorities_op]):
       if self.summary_writer is not None:
-        with tf.compat.v1.variable_scope('Losses'):
-          tf.compat.v1.summary.scalar('CrossEntropyLoss', tf.reduce_mean(loss))
+        with tf.variable_scope('Losses'):
+          tf.summary.scalar('CrossEntropyLoss', tf.reduce_mean(loss))
       # Schaul et al. reports a slightly different rule, where 1/N is also
       # exponentiated by beta. Not doing so seems more reasonable, and did not
       # impact performance in our experiments.
@@ -310,11 +295,9 @@ class RainbowAgent(dqn_agent.DQNAgent):
                         is_terminal,
                         priority=None):
     """Stores a transition when in training mode.
-
     Executes a tf session and executes replay buffer ops in order to store the
     following tuple in the replay buffer (last_observation, action, reward,
     is_terminal, priority).
-
     Args:
       last_observation: Last observation, type determined via observation_type
         parameter in the replay_memory constructor.
@@ -339,23 +322,18 @@ class RainbowAgent(dqn_agent.DQNAgent):
 def project_distribution(supports, weights, target_support,
                          validate_args=False):
   """Projects a batch of (support, weights) onto target_support.
-
   Based on equation (7) in (Bellemare et al., 2017):
     https://arxiv.org/abs/1707.06887
   In the rest of the comments we will refer to this equation simply as Eq7.
-
   This code is not easy to digest, so we will use a running example to clarify
   what is going on, with the following sample inputs:
-
     * supports =       [[0, 2, 4, 6, 8],
                         [1, 3, 4, 5, 6]]
     * weights =        [[0.1, 0.6, 0.1, 0.1, 0.1],
                         [0.1, 0.2, 0.5, 0.1, 0.1]]
     * target_support = [4, 5, 6, 7, 8]
-
   In the code below, comments preceded with 'Ex:' will be referencing the above
   values.
-
   Args:
     supports: Tensor of shape (batch_size, num_dims) defining supports for the
       distribution.
@@ -368,11 +346,9 @@ def project_distribution(supports, weights, target_support,
       respectively. The values in this tensor must be equally spaced.
     validate_args: Whether we will verify the contents of the
       target_support parameter.
-
   Returns:
     A Tensor of shape (batch_size, num_dims) with the projection of a batch of
     (support, weights) onto target_support.
-
   Raises:
     ValueError: If target_support has no dimensions, or if shapes of supports,
       weights, and target_support are incompatible.

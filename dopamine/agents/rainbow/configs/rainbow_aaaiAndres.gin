@@ -30,7 +30,7 @@ atari_lib.create_atari_environment.sticky_actions = False
 
 
 create_agent.agent_name = 'rainbow'
-Runner.num_iterations = 200
+Runner.num_iterations = 20
 Runner.training_steps = 50000  # agent steps before saving
 Runner.evaluation_steps = 0  # agent steps
 Runner.max_steps_per_episode = 27000  # agent steps

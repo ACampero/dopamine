@@ -17,13 +17,14 @@ AtariPreprocessing.frame_skip = 1
 RainbowAgent.update_period = 1
 
 # Increase the number of steps in the multi-step returns from 3 to 20
-RainbowAgent.update_horizon = 3
+RainbowAgent.update_horizon = 20
 
 # Reduce the number of steps before we start sampling from replay from 20,000 to 1600
 RainbowAgent.min_replay_history = 1600
 
 # They use another architecture for the convolutional layers
 RainbowAgent.architecture = 'efficient'
+atari_lib.create_atari_environment.parameter_set = 'efficient_rainbow'
 
 # Network parameters
 tf.train.AdamOptimizer.beta1 = .9
@@ -38,12 +39,12 @@ create_agent.agent_name = 'rainbow'
 # ---------------------------------------------------------
 
 # Modify as needed.
-Runner.num_iterations = 200
+Runner.num_iterations = 20
 Runner.training_steps = 50000  
 Runner.evaluation_steps = 0  
 
-RainbowAgent.epsilon_decay_period = 50000  
-RainbowAgent.target_update_period = 500  # agent steps
+RainbowAgent.epsilon_decay_period = 150000  
+RainbowAgent.target_update_period = 50  # agent steps
 
 # ---------------------------------------------------------
 # The other hyperparameters follow Hessel et al. (2018), except for sticky_actions,
@@ -64,9 +65,9 @@ RainbowAgent.replay_scheme = 'prioritized'
 RainbowAgent.tf_device = '/gpu:0'  # use '/cpu:*' for non-GPU version
 RainbowAgent.optimizer = @tf.train.AdamOptimizer()
 
-atari_lib.create_atari_environment.game_name = 'Pong'
+# atari_lib.create_atari_environment.game_name = 'Pong'
 # Sticky actions with probability 0.25, as suggested by (Machado et al., 2017).
-atari_lib.create_atari_environment.sticky_actions = True
+# atari_lib.create_atari_environment.sticky_actions = True
 
 Runner.max_steps_per_episode = 27000  # agent steps
 

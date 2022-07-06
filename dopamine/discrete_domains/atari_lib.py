@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Atari-specific utilities including Atari-specific network architectures.
-
 This includes a class implementing minimal Atari 2600 preprocessing, which
 is in charge of:
   . Emitting a terminal signal when losing a life (optional).
@@ -42,7 +41,7 @@ parentdir = os.path.dirname(currentdir)
 parentdir = os.path.dirname(parentdir)
 parentdir = os.path.dirname(parentdir)
 sys.path.insert(0,parentdir)
-from VGDLEnvAndres import VGDLEnvAndres
+from DopamineVGDLEnv import DopamineVGDLEnv
 
 
 NATURE_DQN_OBSERVATION_SHAPE = (84, 84)  # Size of downscaled Atari 2600 frame.
@@ -53,26 +52,21 @@ NATURE_DQN_STACK_SIZE = 4  # Number of frames in the state stack.
 
 
 @gin.configurable
-def create_atari_environment(game_name=None, sticky_actions=True):
+def create_atari_environment(game_name=None, sticky_actions=True, parameter_set=''):
   """Wraps an Atari 2600 Gym environment with some basic preprocessing.
-
   This preprocessing matches the guidelines proposed in Machado et al. (2017),
   "Revisiting the Arcade Learning Environment: Evaluation Protocols and Open
   Problems for General Agents".
-
   The created environment is the Gym wrapper around the Arcade Learning
   Environment.
-
   The main choice available to the user is whether to use sticky actions or not.
   Sticky actions, as prescribed by Machado et al., cause actions to persist
   with some probability (0.25) when a new command is sent to the ALE. This
   can be viewed as introducing a mild form of stochasticity in the environment.
   We use them by default.
-
   Args:
     game_name: str, the name of the Atari 2600 domain.
     sticky_actions: bool, whether to use sticky_actions as per Machado et al.
-
   Returns:
     An Atari 2600 environment with some standard preprocessing.
   """
@@ -80,7 +74,7 @@ def create_atari_environment(game_name=None, sticky_actions=True):
   #ANDRES
   #pdb.set_trace()
   if game_name[0:4] == 'VGDL':
-    env = VGDLEnvAndres(game_name)
+    env = DopamineVGDLEnv(game_name, parameter_set)
   else:
     game_version = 'v0' if sticky_actions else 'v4'
     full_game_name = '{}NoFrameskip-{}'.format(game_name, game_version)
@@ -96,12 +90,10 @@ def create_atari_environment(game_name=None, sticky_actions=True):
 
 def nature_dqn_network(num_actions, network_type, state):
   """The convolutional network used to compute the agent's Q-values.
-
   Args:
     num_actions: int, number of actions.
     network_type: namedtuple, collection of expected values to return.
     state: `tf.Tensor`, contains the agent's current state.
-
   Returns:
     net: _network_type object containing the tensors output by the network.
   """
@@ -119,14 +111,12 @@ def nature_dqn_network(num_actions, network_type, state):
 
 def rainbow_network(num_actions, num_atoms, support, network_type, state):
   """The convolutional network used to compute agent's Q-value distributions.
-
   Args:
     num_actions: int, number of actions.
     num_atoms: int, the number of buckets of the value function distribution.
     support: tf.linspace, the support of the Q-value distribution.
     network_type: namedtuple, collection of expected values to return.
     state: `tf.Tensor`, contains the agent's current state.
-
   Returns:
     net: _network_type object containing the tensors output by the network.
   """
@@ -155,18 +145,50 @@ def rainbow_network(num_actions, num_atoms, support, network_type, state):
   q_values = tf.reduce_sum(support * probabilities, axis=2)
   return network_type(q_values, logits, probabilities)
 
+def efficient_rainbow_network(num_actions, num_atoms, support, network_type, state):
+  """The convolutional network used to compute agent's Q-value distributions.
+  Args:
+    num_actions: int, number of actions.
+    num_atoms: int, the number of buckets of the value function distribution.
+    support: tf.linspace, the support of the Q-value distribution.
+    network_type: namedtuple, collection of expected values to return.
+    state: `tf.Tensor`, contains the agent's current state.
+  Returns:
+    net: _network_type object containing the tensors output by the network.
+  """
+  weights_initializer = tf.contrib.slim.variance_scaling_initializer(
+      factor=1.0 / np.sqrt(3.0), mode='FAN_IN', uniform=True)
+
+  net = tf.cast(state, tf.float32)
+  net = tf.div(net, 255.)
+  net = tf.contrib.slim.conv2d(
+      net, 32, [5, 5], stride=5, weights_initializer=weights_initializer)
+  net = tf.contrib.slim.conv2d(
+      net, 64, [5, 5], stride=5, weights_initializer=weights_initializer)
+  net = tf.contrib.slim.flatten(net)
+  net = tf.contrib.slim.fully_connected(
+      net, 256, weights_initializer=weights_initializer)
+  net = tf.contrib.slim.fully_connected(
+      net,
+      num_actions * num_atoms,
+      activation_fn=None,
+      weights_initializer=weights_initializer)
+
+  logits = tf.reshape(net, [-1, num_actions, num_atoms])
+  probabilities = tf.contrib.layers.softmax(logits)
+  q_values = tf.reduce_sum(support * probabilities, axis=2)
+  return network_type(q_values, logits, probabilities)
+
 
 def implicit_quantile_network(num_actions, quantile_embedding_dim,
                               network_type, state, num_quantiles):
   """The Implicit Quantile ConvNet.
-
   Args:
     num_actions: int, number of actions.
     quantile_embedding_dim: int, embedding dimension for the quantile input.
     network_type: namedtuple, collection of expected values to return.
     state: `tf.Tensor`, contains the agent's current state.
     num_quantiles: int, number of quantile inputs.
-
   Returns:
     net: _network_type object containing the tensors output by the network.
   """
@@ -214,15 +236,12 @@ def implicit_quantile_network(num_actions, quantile_embedding_dim,
 @gin.configurable
 class AtariPreprocessing(object):
   """A class implementing image preprocessing for Atari 2600 agents.
-
   Specifically, this provides the following subset from the JAIR paper
   (Bellemare et al., 2013) and Nature DQN paper (Mnih et al., 2015):
-
     * Frame skipping (defaults to 4).
     * Terminal signal when a life is lost (off by default).
     * Grayscale and max-pooling of the last two frames.
     * Downsample the screen to a square image (defaults to 84x84).
-
   More generally, this class follows the preprocessing guidelines set down in
   Machado et al. (2018), "Revisiting the Arcade Learning Environment:
   Evaluation Protocols and Open Problems for General Agents".
@@ -231,14 +250,12 @@ class AtariPreprocessing(object):
   def __init__(self, environment, frame_skip=4, terminal_on_life_loss=False,
                screen_size=84):
     """Constructor for an Atari 2600 preprocessor.
-
     Args:
       environment: Gym environment whose observations are preprocessed.
       frame_skip: int, the frequency at which the agent experiences the game.
       terminal_on_life_loss: bool, If True, the step() method returns
         is_terminal=True whenever a life is lost. See Mnih et al. 2015.
       screen_size: int, size of a resized Atari 2600 frame.
-
     Raises:
       ValueError: if frame_skip or screen_size are not strictly positive.
     """
@@ -289,7 +306,6 @@ class AtariPreprocessing(object):
 
   def reset(self):
     """Resets the environment.
-
     Returns:
       observation: numpy array, the initial observation emitted by the
         environment.
@@ -302,15 +318,12 @@ class AtariPreprocessing(object):
 
   def render(self, mode):
     """Renders the current screen, before preprocessing.
-
     This calls the Gym API's render() method.
-
     Args:
       mode: Mode argument for the environment's render() method.
         Valid values (str) are:
           'rgb_array': returns the raw ALE image.
           'human': renders to display via the Gym renderer.
-
     Returns:
       if mode='rgb_array': numpy array, the most recent screen.
       if mode='human': bool, whether the rendering was successful.
@@ -319,17 +332,13 @@ class AtariPreprocessing(object):
 
   def step(self, action):
     """Applies the given action in the environment.
-
     Remarks:
-
       * If a terminal state (from life loss or episode end) is reached, this may
         execute fewer than self.frame_skip steps in the environment.
       * Furthermore, in this case the returned observation may not contain valid
         image data and should be ignored.
-
     Args:
       action: The action to be executed.
-
     Returns:
       observation: numpy array, the observation following the action.
       reward: float, the reward following the action.
@@ -368,12 +377,9 @@ class AtariPreprocessing(object):
 
   def _fetch_grayscale_observation(self, output):
     """Returns the current observation in grayscale.
-
     The returned observation is stored in 'output'.
-
     Args:
       output: numpy array, screen buffer to hold the returned observation.
-
     Returns:
       observation: numpy array, the current observation in grayscale.
     """
@@ -382,9 +388,7 @@ class AtariPreprocessing(object):
 
   def _pool_and_resize(self):
     """Transforms two frames into a Nature DQN observation.
-
     For efficiency, the transformation is done in-place in self.screen_buffer.
-
     Returns:
       transformed_screen: numpy array, pooled, resized screen.
     """
@@ -398,3 +402,4 @@ class AtariPreprocessing(object):
                                    interpolation=cv2.INTER_AREA)
     int_image = np.asarray(transformed_image, dtype=np.uint8)
     return np.expand_dims(int_image, axis=2)
+

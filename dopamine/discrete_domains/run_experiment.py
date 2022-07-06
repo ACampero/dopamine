@@ -240,7 +240,7 @@ class Runner(object):
           assert 'current_iteration' in experiment_data
           self._logger.data = experiment_data['logs']
           self._start_iteration = experiment_data['current_iteration'] + 1
-          if self._environment.game_name[0:4] == 'VGDL':
+          if 'game_name' in self._environment.__dict__ and self._environment.game_name[0:4] == 'VGDL':
             self._environment.set_level(experiment_data['vgdl_level'], experiment_data['training_steps'])
         tf.logging.info('Reloaded checkpoint and will start from iteration %d',
                         self._start_iteration)
@@ -474,7 +474,7 @@ class Runner(object):
     Args:
       iteration: int, iteration number for checkpointing.
     """
-    if self._environment.game_name[0:4] == 'VGDL':
+    if 'game_name' in self._environment.__dict__ and self._environment.game_name[0:4] == 'VGDL':
       vgdl_level = self._environment.get_level()
     else:
       vgdl_level = 0

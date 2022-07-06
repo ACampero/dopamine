@@ -13,22 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Compact implementation of a simplified Rainbow agent.
-
 Specifically, we implement the following components from Rainbow:
-
   * n-step updates;
   * prioritized replay; and
   * distributional RL.
-
 These three components were found to significantly impact the performance of
 the Atari game-playing agent.
-
 Furthermore, our implementation does away with some minor hyperparameter
 choices. Specifically, we
-
   * keep the beta exponent fixed at beta=0.5, rather than increase it linearly;
   * remove the alpha parameter, which was set to alpha=0.5 throughout the paper.
-
 Details in "Rainbow: Combining Improvements in Deep Reinforcement Learning" by
 Hessel et al. (2018).
 """
@@ -60,6 +54,7 @@ class RainbowAgent(dqn_agent.DQNAgent):
                observation_dtype=dqn_agent.NATURE_DQN_DTYPE,
                stack_size=dqn_agent.NATURE_DQN_STACK_SIZE,
                network=atari_lib.rainbow_network,
+               architecture="canonical",
                num_atoms=51,
                vmax=10.,
                gamma=0.99,
@@ -79,7 +74,6 @@ class RainbowAgent(dqn_agent.DQNAgent):
                summary_writer=None,
                summary_writing_frequency=500):
     """Initializes the agent and constructs the components of its graph.
-
     Args:
       sess: `tf.Session`, for executing ops.
       num_actions: int, number of actions the agent can take at any state.
@@ -128,6 +122,9 @@ class RainbowAgent(dqn_agent.DQNAgent):
     # TODO(b/110897128): Make agent optimizer attribute private.
     self.optimizer = optimizer
 
+    if architecture == 'efficient':
+        network = atari_lib.efficient_rainbow_network
+
     dqn_agent.DQNAgent.__init__(
         self,
         sess=sess,
@@ -153,7 +150,6 @@ class RainbowAgent(dqn_agent.DQNAgent):
 
   def _get_network_type(self):
     """Returns the type of the outputs of a value distribution network.
-
     Returns:
       net_type: _network_type object defining the outputs of the network.
     """
@@ -162,10 +158,8 @@ class RainbowAgent(dqn_agent.DQNAgent):
 
   def _network_template(self, state):
     """Builds a convolutional network that outputs Q-value distributions.
-
     Args:
       state: `tf.Tensor`, contains the agent's current state.
-
     Returns:
       net: _network_type object containing the tensors output by the network.
     """
@@ -174,14 +168,11 @@ class RainbowAgent(dqn_agent.DQNAgent):
 
   def _build_replay_buffer(self, use_staging):
     """Creates the replay buffer used by the agent.
-
     Args:
       use_staging: bool, if True, uses a staging area to prefetch data for
         faster training.
-
     Returns:
       A `WrappedPrioritizedReplayBuffer` object.
-
     Raises:
       ValueError: if given an invalid replay scheme.
     """
@@ -199,19 +190,14 @@ class RainbowAgent(dqn_agent.DQNAgent):
 
   def _build_target_distribution(self):
     """Builds the C51 target distribution as per Bellemare et al. (2017).
-
     First, we compute the support of the Bellman target, r + gamma Z'. Where Z'
     is the support of the next state distribution:
-
       * Evenly spaced in [-vmax, vmax] if the current state is nonterminal;
       * 0 otherwise (duplicated num_atoms times).
-
     Second, we compute the next-state probabilities, corresponding to the action
     with highest expected value.
-
     Finally we project the Bellman target (support + probabilities) onto the
     original support.
-
     Returns:
       target_distribution: tf.tensor, the target distribution from the replay.
     """
@@ -252,7 +238,6 @@ class RainbowAgent(dqn_agent.DQNAgent):
 
   def _build_train_op(self):
     """Builds a training op.
-
     Returns:
       train_op: An op performing one step of training from replay data.
     """
@@ -310,11 +295,9 @@ class RainbowAgent(dqn_agent.DQNAgent):
                         is_terminal,
                         priority=None):
     """Stores a transition when in training mode.
-
     Executes a tf session and executes replay buffer ops in order to store the
     following tuple in the replay buffer (last_observation, action, reward,
     is_terminal, priority).
-
     Args:
       last_observation: Last observation, type determined via observation_type
         parameter in the replay_memory constructor.
@@ -339,23 +322,18 @@ class RainbowAgent(dqn_agent.DQNAgent):
 def project_distribution(supports, weights, target_support,
                          validate_args=False):
   """Projects a batch of (support, weights) onto target_support.
-
   Based on equation (7) in (Bellemare et al., 2017):
     https://arxiv.org/abs/1707.06887
   In the rest of the comments we will refer to this equation simply as Eq7.
-
   This code is not easy to digest, so we will use a running example to clarify
   what is going on, with the following sample inputs:
-
     * supports =       [[0, 2, 4, 6, 8],
                         [1, 3, 4, 5, 6]]
     * weights =        [[0.1, 0.6, 0.1, 0.1, 0.1],
                         [0.1, 0.2, 0.5, 0.1, 0.1]]
     * target_support = [4, 5, 6, 7, 8]
-
   In the code below, comments preceded with 'Ex:' will be referencing the above
   values.
-
   Args:
     supports: Tensor of shape (batch_size, num_dims) defining supports for the
       distribution.
@@ -368,11 +346,9 @@ def project_distribution(supports, weights, target_support,
       respectively. The values in this tensor must be equally spaced.
     validate_args: Whether we will verify the contents of the
       target_support parameter.
-
   Returns:
     A Tensor of shape (batch_size, num_dims) with the projection of a batch of
     (support, weights) onto target_support.
-
   Raises:
     ValueError: If target_support has no dimensions, or if shapes of supports,
       weights, and target_support are incompatible.
